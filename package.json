@@ -1,0 +1,17 @@
+{
+  "name": "sakshi",
+  "private": true,
+  "description": "JaanchSetu - FDR / security deposit lifecycle prototype (SIH 2026, SIH26265). Not an official AICTE system.",
+  "scripts": {
+    "setup": "npm install && npm --prefix backend install && npm --prefix frontend install && docker compose up -d postgres redis minio mailhog && npm --prefix backend run prisma:generate && npm --prefix backend run db:push && npm --prefix backend run seed",
+    "seed": "npm --prefix backend run seed",
+    "dev": "concurrently -n api,web -c green,yellow \"npm --prefix backend run dev\" \"npm --prefix frontend run dev\"",
+    "test": "npm --prefix backend test",
+    "build": "npm --prefix backend run build && npm --prefix frontend run build",
+    "seed:scale": "npm --prefix backend run seed:scale",
+    "test:e2e": "npm --prefix backend run test:e2e"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

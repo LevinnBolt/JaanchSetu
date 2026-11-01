@@ -1,0 +1,125 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ---- themes: space-separated RGB so Tailwind can apply opacity. Default is navy + saffron. ---- */
+:root, :root[data-theme='navy'] {
+  --brand: 20 40 75; --brand-50: 234 239 248; --brand-100: 210 220 240; --brand-700: 31 60 112; --brand-800: 24 47 88; --brand-900: 14 29 60;
+  --paper: 232 237 247; --gold: 255 153 51; --gold-600: 224 123 11; --gold-100: 255 235 209;
+}
+:root[data-theme='indigo'] {
+  --brand: 45 42 110; --brand-50: 238 237 250; --brand-100: 218 216 243; --brand-700: 61 58 140; --brand-800: 52 49 123; --brand-900: 30 28 79;
+  --paper: 236 235 248; --gold: 255 194 71; --gold-600: 217 154 11; --gold-100: 255 242 209;
+}
+:root[data-theme='maroon'] {
+  --brand: 94 22 51; --brand-50: 248 236 240; --brand-100: 239 211 220; --brand-700: 122 32 66; --brand-800: 106 27 58; --brand-900: 67 15 37;
+  --paper: 247 237 240; --gold: 232 184 75; --gold-600: 196 147 42; --gold-100: 251 240 212;
+}
+:root[data-theme='ocean'] {
+  --brand: 11 79 108; --brand-50: 230 242 247; --brand-100: 203 229 239; --brand-700: 15 98 136; --brand-800: 13 87 118; --brand-900: 7 53 73;
+  --paper: 226 239 245; --gold: 255 122 89; --gold-600: 229 87 58; --gold-100: 255 227 219;
+}
+
+html { scroll-behavior: smooth; }
+body { @apply bg-paper font-sans text-[15px] text-stone-900 antialiased; }
+:focus-visible { @apply outline outline-2 outline-offset-2 outline-gold-600; }
+
+@layer components {
+  .btn { @apply inline-flex items-center justify-center gap-1.5 rounded-md bg-brand px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700 active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-50; }
+  .btn-gold { @apply inline-flex items-center justify-center gap-1.5 rounded-md bg-gold px-3.5 py-2 text-sm font-bold text-brand shadow-sm transition hover:bg-gold-600 hover:text-white disabled:opacity-50; }
+  .btn-alt { @apply inline-flex items-center justify-center gap-1.5 rounded-md border border-stone-300 bg-white px-3.5 py-2 text-sm font-semibold text-stone-800 shadow-sm transition hover:border-brand hover:bg-brand-50 active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-50; }
+  .btn-danger { @apply inline-flex items-center justify-center gap-1.5 rounded-md border border-red-300 bg-white px-3.5 py-2 text-sm font-semibold text-red-800 transition hover:bg-red-50 disabled:opacity-50; }
+  .btn-sm { @apply !px-2.5 !py-1 !text-xs; }
+  .card { @apply animate-fadeUp rounded-xl border border-stone-200 bg-white p-5 shadow-card; }
+  .inp { @apply w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm shadow-sm transition placeholder:text-stone-400 focus:border-brand focus:outline-none focus:ring-2 focus:ring-gold/60 disabled:bg-stone-100; }
+  .lbl { @apply mb-1 block text-xs font-bold uppercase tracking-wide text-stone-600; }
+  .h-page { @apply text-2xl font-bold tracking-tight text-brand; }
+  .h-sec { @apply text-base font-bold text-brand; }
+  .chip { @apply inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold; }
+  .tbl { @apply w-full border-collapse text-sm; }
+  .tbl th { @apply border-b border-stone-200 bg-stone-50 px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-wider text-stone-600; }
+  .tbl td { @apply border-b border-stone-100 px-3 py-3 align-top; }
+  .tbl tbody tr { @apply transition-colors hover:bg-brand-50/50; }
+  .skeleton { @apply animate-pulse rounded bg-stone-200; }
+}
+
+/* legacy table styling used by simple pages */
+table:not(.tbl) th { @apply border-b border-stone-200 bg-stone-50 px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-wider text-stone-600; }
+table:not(.tbl) td { @apply border-b border-stone-100 px-3 py-2.5 align-top; }
+
+@keyframes splash-in { 0% { opacity: 0; transform: translateY(8px); } 100% { opacity: 1; transform: none; } }
+@keyframes dots { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75%, 100% { content: '...'; } }
+@keyframes load-bar { 0% { transform: translateX(-110%); } 100% { transform: translateX(330%); } }
+.load-bar { animation: load-bar 1.5s cubic-bezier(.45, .05, .55, .95) infinite; }
+/* build-in: deck draws, arch rises, cables drop; then the scan loop starts after var(--b0) */
+@keyframes load-halo { 0%, 100% { transform: scale(.9); opacity: .7; } 50% { transform: scale(1.12); opacity: 1; } }
+@keyframes load-text { 0% { opacity: 0; transform: translateY(6px); } 100% { opacity: 1; transform: none; } }
+.load-halo { animation: load-halo 3.2s ease-in-out infinite; }
+.load-text { animation: load-text .45s ease-out .3s both; }
+.splash-in { animation: splash-in .5s ease-out both; }
+.load-dots::after { content: ''; display: inline-block; width: 1.2em; text-align: left; animation: dots 1.4s steps(1) infinite; }
+
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
+@media print { aside, header, footer, .no-print { display: none !important; } }
+
+/* ---- the JaanchSetu coin: a real 3D rupee coin (see loaders.tsx). Gold is fixed, not themed. ---- */
+@keyframes coin3d-spin { to { transform: rotateY(360deg); } }
+@keyframes coin3d-sway { 0%, 100% { transform: rotateX(17deg) rotateZ(-5deg); } 50% { transform: rotateX(8deg) rotateZ(5deg); } }
+@keyframes coin3d-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(calc(var(--c) * -.07)); } }
+@keyframes coin3d-shadow { 0%, 100% { transform: scale(1); opacity: .34; } 50% { transform: scale(.8); opacity: .2; } }
+@keyframes coin3d-shade-f { 0%, 100% { opacity: 0; } 25%, 75% { opacity: .62; } }
+@keyframes coin3d-shade-b { 0%, 100% { opacity: .62; } 50% { opacity: 0; } }
+@keyframes coin3d-sheen-f { 0% { background-position: 50% 0; } 25% { background-position: 90% 0; } 75% { background-position: 10% 0; } 100% { background-position: 50% 0; } }
+@keyframes coin3d-sheen-b { 0%, 100% { background-position: 10% 0; } 25% { background-position: 10% 0; } 50% { background-position: 50% 0; } 75% { background-position: 90% 0; } }
+
+.coin3d-wrap { display: inline-flex; flex-direction: column; align-items: center; }
+.coin3d-stage { perspective: calc(var(--c) * 4.2); perspective-origin: 50% 38%; padding: calc(var(--c) * .08) calc(var(--c) * .2); }
+.coin3d-bob, .coin3d-tilt, .coin3d { transform-style: preserve-3d; }
+.coin3d-bob { animation: coin3d-bob 1.1s ease-in-out infinite; }
+.coin3d-tilt { animation: coin3d-sway 2.2s ease-in-out infinite; }
+.coin3d { position: relative; width: var(--c); height: var(--c); animation: coin3d-spin 2.2s linear infinite; }
+.coin3d-layer { position: absolute; inset: 0; border-radius: 50%; background: #B8800F; }
+.coin3d-layer.alt { background: #8F600A; }
+.coin3d-face {
+  position: absolute; inset: 0; border-radius: 50%; overflow: hidden; display: flex; align-items: center; justify-content: center;
+  backface-visibility: hidden; -webkit-backface-visibility: hidden;
+  background: radial-gradient(circle at 30% 26%, #FFF3C4 0%, #F6CE62 30%, #E2A92A 62%, #B9810F 92%, #8F600A 120%);
+  box-shadow: inset 0 0 0 calc(var(--c) * .032) #C48E14, inset 0 0 0 calc(var(--c) * .05) rgb(255 255 255 / .5), inset 0 0 calc(var(--c) * .09) rgb(90 55 0 / .35);
+}
+.coin3d-face::before { content: ''; position: absolute; inset: 9%; border-radius: 50%; border: calc(var(--c) * .014) dotted rgb(255 255 255 / .62); box-shadow: 0 0 0 1px rgb(120 75 0 / .22), inset 0 0 0 1px rgb(120 75 0 / .18); }
+.coin3d-face::after {
+  content: ''; position: absolute; inset: 0; border-radius: 50%; pointer-events: none;
+  background-image: linear-gradient(105deg, transparent 38%, rgb(255 255 255 / .78) 50%, transparent 62%); background-size: 300% 100%; background-repeat: no-repeat;
+}
+.coin3d-front::after { animation: coin3d-sheen-f 2.2s linear infinite; }
+.coin3d-back::after { animation: coin3d-sheen-b 2.2s linear infinite; }
+.coin3d-sym { position: relative; font: 800 calc(var(--c) * .46) / 1 'Public Sans', system-ui, sans-serif; color: #A9730B; transform: translateY(-2%);
+  text-shadow: 0 calc(var(--c) * .009) 0 rgb(255 255 255 / .75), 0 calc(var(--c) * -.007) 0 rgb(80 45 0 / .35); }
+.coin3d-sym-back { font-size: calc(var(--c) * .27); letter-spacing: .04em; }
+.coin3d-shade { position: absolute; inset: 0; border-radius: 50%; background: #000; opacity: 0; pointer-events: none; }
+.coin3d-shade-f { animation: coin3d-shade-f 2.2s linear infinite; }
+.coin3d-shade-b { animation: coin3d-shade-b 2.2s linear infinite; }
+.coin3d-shadow { width: calc(var(--c) * .8); height: calc(var(--c) * .13); margin-top: calc(var(--c) * .02); border-radius: 50%; background: radial-gradient(closest-side, rgb(20 24 40 / .45), transparent); animation: coin3d-shadow 1.1s ease-in-out infinite; }
+
+/* small flat coin for buttons and inline waits */
+@keyframes coin-flip { 0%, 100% { transform: scaleX(1); } 50% { transform: scaleX(.08); } }
+.coin-spin { transform-origin: 60px 60px; animation: coin-flip 1.2s cubic-bezier(.45, 0, .55, 1) infinite; }
+
+/* Indic scripts: letter-spacing splits conjuncts and breaks words apart, so turn it off. */
+html:lang(hi) *, html:lang(mr) *, html:lang(ta) * { letter-spacing: normal !important; }
+
+/* Login: 3D stage (CSS only) */
+.login3d-glow { position: absolute; inset: 0; background: radial-gradient(60% 50% at 50% 38%, rgb(var(--gold, 245 158 11) / .28), transparent 70%), radial-gradient(40% 40% at 85% 85%, rgb(255 255 255 / .08), transparent 70%); }
+.login3d-floor { position: absolute; left: -50%; right: -50%; bottom: -8%; height: 62%; transform: perspective(520px) rotateX(62deg); transform-origin: 50% 100%;
+  background-image: linear-gradient(rgb(255 255 255 / .12) 1px, transparent 1px), linear-gradient(90deg, rgb(255 255 255 / .12) 1px, transparent 1px); background-size: 64px 64px;
+  -webkit-mask-image: linear-gradient(to top, #000 10%, transparent 90%); mask-image: linear-gradient(to top, #000 10%, transparent 90%); animation: login3d-scroll 6s linear infinite; }
+@keyframes login3d-scroll { to { background-position: 0 64px, 64px 0; } }
+.login3d-slip { position: absolute; width: 112px; height: 144px; border-radius: 12px; padding: 14px 12px; display: flex; flex-direction: column; gap: 8px;
+  background: linear-gradient(145deg, rgb(255 255 255 / .2), rgb(255 255 255 / .05)); border: 1px solid rgb(255 255 255 / .22); backdrop-filter: blur(3px);
+  box-shadow: 0 24px 40px -18px rgb(0 0 0 / .55); transform: scale(var(--s)) rotateY(-24deg) rotateX(10deg) rotateZ(var(--r)); animation: login3d-float 7s ease-in-out infinite; }
+.login3d-slip b { margin-top: auto; align-self: flex-end; font-size: 26px; line-height: 1; color: rgb(255 255 255 / .55); }
+.login3d-slip-bar { height: 8px; width: 45%; border-radius: 4px; background: rgb(255 255 255 / .55); }
+.login3d-slip-line { height: 5px; width: 100%; border-radius: 3px; background: rgb(255 255 255 / .22); }
+@keyframes login3d-float { 0%, 100% { translate: 0 0; } 50% { translate: 0 -22px; } }
+.login3d-card { position: relative; border-radius: 22px; background: rgb(255 255 255 / .96); color: #1c1917; padding: 62px 26px 24px; box-shadow: 0 40px 80px -24px rgb(0 0 0 / .6), 0 0 0 1px rgb(255 255 255 / .35) inset; transition: transform .15s ease-out; transform-style: preserve-3d; }
+@media (max-width: 640px) { .login3d-slip { display: none; } }

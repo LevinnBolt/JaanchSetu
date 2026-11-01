@@ -1,0 +1,45 @@
+# One command: docker compose up --build
+# Web http://localhost:8080 | API http://localhost:4000/api | MailHog http://localhost:8025 | MinIO console http://localhost:9001
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment: { POSTGRES_USER: sakshi, POSTGRES_PASSWORD: sakshi, POSTGRES_DB: sakshi }
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck: { test: ["CMD-SHELL", "pg_isready -U sakshi"], interval: 3s, timeout: 3s, retries: 20 }
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment: { MINIO_ROOT_USER: minioadmin, MINIO_ROOT_PASSWORD: minioadmin }
+    ports: ["9000:9000", "9001:9001"]
+    volumes: [miniodata:/data]
+  mailhog:
+    image: mailhog/mailhog:latest
+    ports: ["1025:1025", "8025:8025"]
+  backend:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql://sakshi:sakshi@postgres:5432/sakshi
+      REDIS_URL: redis://redis:6379
+      S3_ENDPOINT: http://minio:9000
+      S3_ACCESS_KEY: minioadmin
+      S3_SECRET_KEY: minioadmin
+      SMTP_HOST: mailhog
+      SMTP_PORT: "1025"
+      JWT_SECRET: ${JWT_SECRET:-change-me-for-anything-beyond-a-demo}
+      FILE_ENC_KEY: ${FILE_ENC_KEY:-5341404b5348492d323032362d44454d4f2d4b45592d4e4f542d464f522d5052}
+      CORS_ORIGIN: http://localhost:8080,http://localhost:5173
+      DEMO_MODE: ${DEMO_MODE:-true}
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_started }
+      minio: { condition: service_started }
+    ports: ["4000:4000"]
+  frontend:
+    build: ./frontend
+    depends_on: [backend]
+    ports: ["8080:80"]
+volumes: { pgdata: {}, miniodata: {} }

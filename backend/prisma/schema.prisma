@@ -1,0 +1,358 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  INSTITUTION
+  SCRUTINY
+  APPROVER
+  ADMIN
+}
+
+enum FdrStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_SCRUTINY
+  DISCREPANCY_RAISED
+  ACCEPTED
+  EXPIRING_SOON
+  MATURED
+  RENEWAL_PENDING
+  RENEWED
+  RELEASE_REQUESTED
+  RELEASE_RECOMMENDED
+  RELEASED
+  REJECTED
+}
+
+enum DiscrepancyType {
+  AMOUNT_MISMATCH
+  DATE_MISMATCH
+  FDR_NUMBER_MISMATCH
+  INVALID_IFSC
+  MATURITY_BEFORE_ISSUE
+  NOT_IN_FAVOUR_OF_AUTHORITY
+  MISSING_DOCUMENT
+  DUPLICATE_DOCUMENT
+  DUPLICATE_FDR_NUMBER
+  BANK_MISMATCH
+  BANK_NOT_FOUND
+  MANUAL
+}
+
+enum DiscrepancyStatus {
+  OPEN
+  RESOLVED
+  WAIVED
+}
+
+enum ReviewAction {
+  CONFIRMED
+  CORRECTED
+}
+
+enum ReleaseStatus {
+  REQUESTED
+  RECOMMENDED
+  APPROVED
+  REJECTED
+}
+
+model Institution {
+  id    String @id @default(cuid())
+  name  String
+  city  String
+  state String
+  // Security deposit this institution must keep in place (INR). Set by an admin; null = not set yet.
+  requiredDeposit Int?
+  users User[]
+  fdrs  Fdr[]
+}
+
+model User {
+  id            String       @id @default(cuid())
+  email         String       @unique
+  name          String
+  passwordHash  String
+  // Primary role first. A user may hold more than one role; maker-checker is enforced
+  // per person, not per role.
+  roles        Role[]
+  active        Boolean      @default(true)
+  institutionId String?
+  institution   Institution? @relation(fields: [institutionId], references: [id])
+  createdAt     DateTime     @default(now())
+  notifications Notification[]
+}
+
+model Fdr {
+  id            String    @id @default(cuid())
+  institutionId String
+  institution   Institution @relation(fields: [institutionId], references: [id])
+  status        FdrStatus @default(DRAFT)
+
+  // Denormalised summary used for lists, dashboards and reminders.
+  // Derived from the fields table: officer-reviewed value if present, otherwise the submitted value.
+  // This is NOT proof of genuineness.
+  fdrNumber    String?
+  bankName     String?
+  ifsc         String?
+  amount       Int?
+  issueDate    DateTime?
+  maturityDate DateTime?
+
+  previousFdrId String?
+  previous      Fdr?   @relation("Renewal", fields: [previousFdrId], references: [id])
+  renewals      Fdr[]  @relation("Renewal")
+
+  createdById     String
+  createdByName   String
+  rejectionReason String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  fields         FdrField[]
+  documents      Document[]
+  discrepancies  Discrepancy[]
+  reminders      Reminder[]
+  releaseRequests ReleaseRequest[]
+  transitions    FdrTransition[]
+
+  @@index([institutionId])
+  @@index([status])
+  @@index([maturityDate])
+  @@index([fdrNumber])
+}
+
+model FdrTransition {
+  id         String     @id @default(cuid())
+  fdrId      String
+  fdr        Fdr        @relation(fields: [fdrId], references: [id], onDelete: Cascade)
+  fromStatus FdrStatus?
+  toStatus   FdrStatus
+  actorId    String?
+  actorLabel String
+  note       String?
+  at         DateTime   @default(now())
+  clockDate  String?
+
+  @@index([fdrId])
+}
+
+// One row per key field. Three provenance columns live side by side.
+model FdrField {
+  id    String @id @default(cuid())
+  fdrId String
+  fdr   Fdr    @relation(fields: [fdrId], references: [id], onDelete: Cascade)
+  key   String
+
+  submittedValue  String?
+  submittedById   String?
+  submittedByName String?
+  submittedAt     DateTime?
+
+  extractedValue      String?
+  extractedConfidence Float?
+  extractedAt         DateTime?
+  extractedDocId      String?
+  extractedBy         String?
+
+  bankValue  String?
+  bankAt     DateTime?
+  bankSource String?
+
+  // Officer review is an action on the field. It never becomes "bank confirmed".
+  reviewAction   ReviewAction?
+  reviewedValue  String?
+  reviewedById   String?
+  reviewedByName String?
+  reviewedAt     DateTime?
+  reviewNote     String?
+
+  @@unique([fdrId, key])
+}
+
+model Document {
+  id            String   @id @default(cuid())
+  fdrId         String
+  fdr           Fdr      @relation(fields: [fdrId], references: [id], onDelete: Cascade)
+  fileName      String
+  mimeType      String
+  sizeBytes     Int
+  sha256        String
+  storageKey    String
+  uploadedById  String
+  uploadedByName String
+  uploadedAt    DateTime @default(now())
+  ocrStatus     String   @default("NOT_RUN")
+  ocrNote       String?
+  ocrText       String?
+  ocrMeanConfidence Float?
+
+  @@index([sha256])
+  @@index([fdrId])
+}
+
+model Discrepancy {
+  id             String            @id @default(cuid())
+  fdrId          String
+  fdr            Fdr               @relation(fields: [fdrId], references: [id], onDelete: Cascade)
+  type           DiscrepancyType
+  fieldKey       String?
+  reason         String
+  status         DiscrepancyStatus @default(OPEN)
+  raisedByLabel  String
+  createdAt      DateTime          @default(now())
+  resolutionNote String?
+  resolvedById   String?
+  resolvedByName String?
+  resolvedAt     DateTime?
+
+  @@index([fdrId])
+  @@index([status])
+}
+
+model ReminderRule {
+  id   String @id @default(cuid())
+  days Int    @unique
+}
+
+model Reminder {
+  id            String   @id @default(cuid())
+  fdrId         String
+  fdr           Fdr      @relation(fields: [fdrId], references: [id], onDelete: Cascade)
+  thresholdDays Int
+  // 0 = institution, 1 = scrutiny officer, 2 = approving officer
+  level         Int      @default(0)
+  suppressed    Boolean  @default(false)
+  createdAt     DateTime
+  levelSince    DateTime
+  ackedAt       DateTime?
+  ackedById     String?
+  ackedByName   String?
+  events        EscalationEvent[]
+
+  @@unique([fdrId, thresholdDays])
+}
+
+model EscalationEvent {
+  id         String   @id @default(cuid())
+  reminderId String
+  reminder   Reminder @relation(fields: [reminderId], references: [id], onDelete: Cascade)
+  fdrId      String
+  level      Int
+  toRole     Role
+  at         DateTime
+  note       String
+}
+
+model Notification {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fdrId      String?
+  reminderId String?
+  kind       String
+  title      String
+  body       String
+  createdAt  DateTime
+  readAt     DateTime?
+
+  @@index([userId])
+}
+
+model Setting {
+  key   String @id
+  value String
+}
+
+// Seed data the simulator answers from. In reality this would be the bank's own record.
+model SimBankRecord {
+  id            String   @id @default(cuid())
+  fdrNumber     String   @unique
+  bankName      String
+  branch        String
+  ifsc          String
+  amount        Int
+  issueDate     DateTime
+  maturityDate  DateTime
+  depositorName String
+  inFavourOf    String
+  outage        Boolean  @default(false)
+}
+
+model ReleaseRequest {
+  id            String        @id @default(cuid())
+  fdrId         String
+  fdr           Fdr           @relation(fields: [fdrId], references: [id], onDelete: Cascade)
+  status        ReleaseStatus @default(REQUESTED)
+  reason        String
+  requestedById String
+  requestedByName String
+  requestedAt   DateTime      @default(now())
+  checklist     Json
+  makerId       String?
+  makerName     String?
+  makerNote     String?
+  recommendedAt DateTime?
+  checkerId     String?
+  checkerName   String?
+  decisionReason String?
+  decidedAt     DateTime?
+
+  @@index([fdrId])
+}
+
+model AuditLog {
+  seq        Int      @id @default(autoincrement())
+  at         DateTime
+  clockDate  String?
+  actorId    String?
+  actorEmail String
+  actorRole  String
+  action     String
+  entityType String
+  entityId   String?
+  detail     Json
+  prevHash   String
+  hash       String   @unique
+
+  @@index([entityType, entityId])
+}
+
+// Every email the system tries to send. With no mail server configured the message is still recorded here,
+// so reminders are visible and auditable (status RECORDED = stored only, SENT = accepted by a mail server).
+model EmailLog {
+  id        String   @id @default(cuid())
+  toEmail   String
+  toUserId  String?
+  subject   String
+  body      String
+  status    String
+  error     String?
+  fdrId     String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+// A verifiable record of an approved release / refund. orderHash is the SHA-256 of the snapshot, and the same hash is written
+// into the tamper-evident audit trail (entry auditSeq), so anyone can check the order still matches the log.
+model ReleaseOrder {
+  id               String   @id @default(cuid())
+  orderNo          String   @unique
+  releaseRequestId String   @unique
+  fdrId            String
+  snapshot         Json
+  orderHash        String
+  auditSeq         Int
+  auditHash        String
+  createdAt        DateTime @default(now())
+
+  @@index([fdrId])
+}

@@ -1,0 +1,18 @@
+node_modules
+dist
+.env
+backend/storage
+.pgdata
+
+# Local configuration and runtime output
+.env.*
+!.env.example
+*.log
+*.tsbuildinfo
+coverage/
+.DS_Store
+Thumbs.db
+
+# Tesseract language-model cache (downloaded automatically)
+*.traineddata
+*.traineddata.gz
