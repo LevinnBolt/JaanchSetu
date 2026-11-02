@@ -107,11 +107,11 @@ export function useBank() {
 }
 
 /** Provenance is always words + colour. There is deliberately no generic "Verified" badge. */
-export const Prov = ({ kind, small }: { kind: 'SUBMITTED' | 'EXTRACTED' | 'BANK'; small?: boolean }) => {
+export const Prov = ({ kind, small }: { kind: 'EXTRACTED' | 'REVIEW' | 'BANK'; small?: boolean }) => {
   const bank = useBank();
   const m = {
-    SUBMITTED: ['Submitted', 'bg-stone-100 text-stone-800 border-stone-400', 'file'],
-    EXTRACTED: ['Extracted (OCR)', 'bg-blue-50 text-blue-900 border-blue-400', 'scan'],
+    EXTRACTED: ['Read from document (OCR)', 'bg-blue-50 text-blue-900 border-blue-400', 'scan'],
+    REVIEW: ['Officer-reviewed', 'bg-stone-100 text-stone-800 border-stone-400', 'check'],
     BANK: [bank.label, 'bg-amber-50 text-amber-900 border-amber-500', 'bank'],
   }[kind];
   return <span className={`chip ${small ? '!px-2 !py-0 text-[10.5px]' : ''} ${m[1]}`}><Icon name={m[2]} size={small ? 11 : 13} />{t(m[0])}</span>;
@@ -147,8 +147,8 @@ export function ThemePicker({ className = '' }: { className?: string }) {
 // ---------------------------------------------------------------- roles, people, paging
 export const ROLE_LABEL: Record<string, string> = translated({ INSTITUTION: 'Institution', SCRUTINY: 'Scrutiny Officer', APPROVER: 'Approving Officer', ADMIN: 'Admin' });
 export const ROLE_DUTY: Record<string, string> = translated({
-  INSTITUTION: 'Submits FDRs, tracks maturity, requests renewal and release / refund.',
-  SCRUTINY: 'The maker. Reviews OCR against what was typed, flags discrepancies, recommends release.',
+  INSTITUTION: 'Uploads FDR documents, tracks maturity, requests renewal and release / refund.',
+  SCRUTINY: 'The maker. Reviews the values read from each document, flags discrepancies, recommends release.',
   APPROVER: 'The checker. Gives the final approve or reject on a release.',
   ADMIN: 'Manages users, reminder rules, the demo clock and reads the audit trail.',
 });
@@ -221,7 +221,7 @@ export const Days = ({ d }: { d: number | null }) =>
 // ---------------------------------------------------------------- loaders
 // The one JaanchSetu loader is a 3D rupee coin (see loaders.tsx).
 /** Minimum time (ms) a loader stays on screen. Local data loads in milliseconds, which would hide the animation. Set to 0 to disable. */
-export const LOADER_MS = { splash: 0, page: 0 };
+export const LOADER_MS = { splash: 1800, page: 900 };
 
 export const Loader = ({ size = 170 }: { size?: number }) => <CoinLoader size={size} />;
 
@@ -298,7 +298,7 @@ export function Stepper({ status }: { status: string }) {
         const done = i < cur || (i === cur && ['RENEWED', 'RELEASED'].includes(status));
         const here = i === cur && !done;
         return (
-          <li key={s} className="flex min-w-0 basis-0 flex-1 flex-col items-center text-center">
+          <li key={s} className="flex flex-1 flex-col items-center text-center">
             <div className="flex w-full items-center">
               <span className={`h-0.5 flex-1 ${i === 0 ? 'opacity-0' : i <= cur ? 'bg-brand' : 'bg-stone-300'}`} />
               <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 text-xs font-bold ${done ? 'border-brand bg-brand text-white' : here ? (bad ? 'border-red-600 bg-red-50 text-red-700 ring-4 ring-red-100' : 'border-gold-600 bg-gold text-brand ring-4 ring-gold-100') : 'border-stone-300 bg-white text-stone-400'}`}>
@@ -306,7 +306,7 @@ export function Stepper({ status }: { status: string }) {
               </span>
               <span className={`h-0.5 flex-1 ${i === STAGES.length - 1 ? 'opacity-0' : i < cur ? 'bg-brand' : 'bg-stone-300'}`} />
             </div>
-            <span className={`mt-1.5 w-full break-words px-0.5 text-[11px] leading-tight ${here ? 'font-bold text-brand' : done ? 'font-semibold text-stone-700' : 'text-stone-400'}`}>{t(s)}</span>
+            <span className={`mt-1.5 px-0.5 text-[11px] leading-tight ${here ? 'font-bold text-brand' : done ? 'font-semibold text-stone-700' : 'text-stone-400'}`}>{t(s)}</span>
           </li>
         );
       })}
@@ -345,13 +345,7 @@ export function DialogHost() {
   const p = useSyncExternalStore(subscribe, () => prompt);
   const [val, setVal] = useState('');
   const ref = useRef<HTMLTextAreaElement>(null);
-  useEffect(() => {
-    if (!p) return;
-    const previous = document.activeElement as HTMLElement | null;
-    setVal('');
-    const timer = setTimeout(() => ref.current?.focus(), 0);
-    return () => { clearTimeout(timer); previous?.focus(); };
-  }, [p]);
+  useEffect(() => { if (p) { setVal(''); setTimeout(() => ref.current?.focus(), 30); } }, [p]);
   const close = (v: string | null) => { p?.resolve(v); prompt = null; emit(); };
   return (
     <>
@@ -363,15 +357,7 @@ export function DialogHost() {
         ))}
       </div>
       {p && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-brand-900/50 p-4" onKeyDown={(e) => {
-          if (e.key === 'Escape') { e.preventDefault(); close(null); }
-          if (e.key === 'Tab') {
-            const nodes = Array.from(e.currentTarget.querySelectorAll<HTMLElement>('textarea,button:not([disabled])'));
-            const first = nodes[0], last = nodes[nodes.length - 1];
-            if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus(); }
-            else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
-          }
-        }}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-brand-900/50 p-4" onKeyDown={(e) => e.key === 'Escape' && close(null)}>
           <form role="dialog" aria-modal="true" aria-label={p.title} className="card w-full max-w-md !p-6 shadow-pop" onSubmit={(e) => { e.preventDefault(); if (val.trim().length >= p.min) close(val.trim()); }}>
             <h2 className="h-sec mb-3">{p.title}</h2>
             <label className="lbl" htmlFor="dlg-text">{p.label}</label>

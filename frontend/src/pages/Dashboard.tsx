@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { stateText } from './ResolutionPanel';
 import { Link, useNavigate } from 'react-router-dom';
 import { api, dmy, inr } from '../api';
 import { t } from '../i18n';
@@ -12,6 +13,7 @@ const CARDS: { k: string; label: string; to: string; icon: string; tone: string;
   { k: 'bankConfirmed', label: 'Bank-confirmed', to: '/fdrs?bucket=bankconfirmed', icon: 'bank', tone: 'amber', hint: 'Checked with the bank', bank: true },
   { k: 'active', label: 'Active', to: '/fdrs?bucket=active', icon: 'layers', tone: 'emerald', hint: 'Accepted and running' },
   { k: 'expiring90', label: 'Expiring in 90 days', to: '/fdrs?bucket=expiring90', icon: 'clock', tone: 'amber', hint: 'Need renewal or release' },
+  { k: 'unresolved', label: 'Matured, unresolved', to: '/fdrs?bucket=matured', icon: 'alert', tone: 'red', hint: 'Past maturity, no renewal or release done' },
   { k: 'matured', label: 'Matured', to: '/fdrs?bucket=matured', icon: 'alert', tone: 'orange', hint: 'Past maturity date' },
   { k: 'renewalPending', label: 'Renewal pending', to: '/fdrs?bucket=renewal', icon: 'repeat', tone: 'sky', hint: 'Awaiting renewed FDR' },
   { k: 'releasePending', label: 'Release / refund pending', to: '/fdrs?bucket=release', icon: 'unlock', tone: 'violet', hint: 'In maker-checker' },
@@ -119,8 +121,8 @@ export default function Dashboard() {
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
         {CARDS.filter((c) => !c.staffOnly || staff).map((c) => {
-          const v = c.k === 'coverageAtRisk' ? (data.coverage ? data.coverage.shortfall + data.coverage.atRisk : 0) : data.cards[c.k];
-          const alarm = (c.k === 'overdue' || c.k === 'openDiscrepancies' || c.k === 'coverageAtRisk') && v > 0;
+          const v = c.k === 'coverageAtRisk' ? (data.coverage ? data.coverage.shortfall + data.coverage.atRisk : 0) : c.k === 'unresolved' ? (data.maturityRisk?.unresolved ?? 0) : data.cards[c.k];
+          const alarm = (c.k === 'overdue' || c.k === 'openDiscrepancies' || c.k === 'coverageAtRisk' || c.k === 'unresolved') && v > 0;
           return (
             <Link key={c.k} to={c.to} className={`card group relative overflow-hidden !p-4 transition before:absolute before:inset-x-0 before:top-0 before:h-1 hover:-translate-y-0.5 hover:shadow-pop ${EDGE[c.tone]} ${alarm ? '!border-red-300' : ''}`}>
               <span className={`mb-2 inline-flex rounded-lg p-2 ${TONE[c.tone]}`}><Icon name={c.icon} size={18} /></span>
@@ -224,6 +226,32 @@ export default function Dashboard() {
         </section>
         </div>
       </div>
+
+      {data.maturityRisk && (
+        <section className="card" aria-labelledby="mrisk">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div><h2 id="mrisk" className="h-sec">{t('Maturity risk')}</h2><p className="text-xs text-stone-500">{t('Deposits past maturity with no completed renewal or release. These age bands are operating defaults, not statutory deadlines.')}</p></div>
+            <span className="chip border-stone-300 bg-stone-50 text-stone-700">{t('{n} without a case', { n: data.maturityRisk.withoutCase })}</span>
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {[['1-7 days past', data.maturityRisk.recent, 'text-amber-700'], ['8-30 days past', data.maturityRisk.late, 'text-orange-700'], ['31+ days past', data.maturityRisk.critical, 'text-red-700'], ['Case deadline missed', data.maturityRisk.overdueCases, 'text-red-700']].map(([l, v, c]) => (
+              <div key={l as string} className="rounded-lg border border-stone-200 p-3"><div className={`text-2xl font-extrabold tabular-nums ${v ? c : 'text-brand'}`}>{v as number}</div><div className="text-xs font-semibold text-stone-600">{t(l as string)}</div></div>))}
+          </div>
+          {Object.keys(data.maturityRisk.casesByState).length > 0 && (
+            <p className="mt-3 flex flex-wrap items-center gap-2 text-xs text-stone-600">{t('Resolution cases')}:
+              {Object.entries(data.maturityRisk.casesByState).map(([k, n]) => <span key={k} className="chip border-stone-300 bg-white text-stone-700">{stateText(k)} · {n as number}</span>)}
+              {data.maturityRisk.avgDaysToComplete !== null && <span className="ml-auto">{t('Average time to complete: {n} days', { n: data.maturityRisk.avgDaysToComplete })}</span>}
+            </p>)}
+          {data.maturityRisk.worst.length > 0 ? (
+            <ul className="mt-3 divide-y divide-stone-100">
+              {data.maturityRisk.worst.map((w: any) => (
+                <li key={w.id}><Link to={`/fdrs/${w.id}`} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm hover:bg-stone-50">
+                  <span><b className="text-brand">{w.fdrNumber}</b> <span className="text-stone-600">· {w.institution}</span></span>
+                  <span className="flex items-center gap-2"><span className={`font-bold ${w.days > 30 ? 'text-red-700' : w.days > 7 ? 'text-orange-700' : 'text-amber-700'}`}>{t('{n} days past maturity', { n: w.days })}</span>
+                    {w.caseState ? <span className="chip border-sky-300 bg-sky-50 text-sky-800">{stateText(w.caseState)}</span> : <span className="chip border-red-300 bg-red-50 text-red-800">{t('No case yet')}</span>}</span>
+                </Link></li>))}
+            </ul>) : <Empty icon="check">{t('No deposit is past maturity without a resolution.')}</Empty>}
+        </section>)}
 
       {staff && (
         <section className="card" aria-labelledby="imp">

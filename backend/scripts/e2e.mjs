@@ -19,8 +19,8 @@ const ok = (name, cond, extra = '') => {
 const section = (t) => console.log(`\n${t}`);
 const short = (v) => (typeof v === 'string' ? v : JSON.stringify(v)).slice(0, 160);
 
-async function req(token, method, path, { body, form, raw } = {}) {
-  const headers = {};
+async function req(token, method, path, { body, form, raw, headers: extra } = {}) {
+  const headers = { ...(extra || {}) };
   if (token) headers.authorization = `Bearer ${token}`;
   let payload;
   if (form) payload = form;
@@ -125,7 +125,7 @@ async function readyAndAccept(scr, id) {
   section('E. New FDR: submit, OCR, review, bank check, accept');
   const samples = (await req(null, 'GET', '/demo/samples')).data;
   const matching = samples.find((s) => s.name === 'matching');
-  const mismatching = samples.find((s) => s.name === 'mismatching' || s.name === 'mismatch');
+  const mismatching = samples.find((s) => s.name === 'problem' || s.name === 'mismatching' || s.name === 'mismatch');
   const created = await req(inst, 'POST', '/fdrs', { form: await sampleForm(matching) });
   ok('institution submits the matching sample (201)', created.status === 201 || created.status === 200, short(created.data));
   const idA = created.data.id;
@@ -208,6 +208,45 @@ async function readyAndAccept(scr, id) {
   await req(adm, 'PUT', '/admin/reminder-rules', { body: { days: [90, 60, 30, 7] } });
   ok('invalid reminder rules are refused (400)', (await req(adm, 'PUT', '/admin/reminder-rules', { body: { days: [] } })).status === 400);
 
+  // ------------------------------------------------------------------ M1. resolution case for the renewal below
+  section('M1. Resolution case: renewal of the matured FDR');
+  const s4id = anchors.s4;
+  const mat4 = (await req(inst, 'GET', `/fdrs/${s4id}/maturity`)).data;
+  ok('the matured FDR shows its maturity age and a pending resolution', mat4.matured === true && mat4.daysPastMaturity >= 1 && mat4.pendingResolution === true && mat4.canOpenCase === true, short(mat4));
+  const key1 = `k-${RUN}-1`;
+  const c4a = await req(inst, 'POST', `/fdrs/${s4id}/resolutions`, { body: { type: 'RENEWAL', delayReason: 'Renewal paperwork is with the bank (e2e)' }, headers: { 'idempotency-key': key1 } });
+  ok('the institution opens a renewal case', c4a.status < 300 && c4a.data.state === 'OPEN' && /^JSRC-/.test(c4a.data.caseNo), short(c4a.data));
+  const case4 = c4a.data.id;
+  const c4b = await req(inst, 'POST', `/fdrs/${s4id}/resolutions`, { body: { type: 'RENEWAL', delayReason: 'Renewal paperwork is with the bank (e2e)' }, headers: { 'idempotency-key': key1 } });
+  ok('the same request sent twice returns the same case (no duplicate)', c4b.status < 300 && c4b.data.id === case4, short(c4b.data));
+  const c4c = await req(inst, 'POST', `/fdrs/${s4id}/resolutions`, { body: { type: 'RELEASE', delayReason: 'A different request while one is active' } });
+  ok('a second active case on the same FDR is refused (409)', c4c.status === 409, `${c4c.status} ${short(c4c.data)}`);
+  const evid = await req(inst, 'POST', `/resolutions/${case4}/evidence`, { body: { kind: 'BANK_LETTER', note: 'Bank letter confirming the renewal is in process' } });
+  ok('evidence is added and moves the case to Evidence pending', evid.status < 300 && evid.data.state === 'EVIDENCE_PENDING' && evid.data.evidence.length === 1, short(evid.data));
+  const instSubmit = await req(inst, 'POST', `/resolutions/${case4}/submit`, { body: {} });
+  ok('the institution cannot submit for approval (403)', instSubmit.status === 403, `${instSubmit.status}`);
+  const apprSubmit = await req(app, 'POST', `/resolutions/${case4}/submit`, { body: {} });
+  ok('an approving officer cannot submit it either (403)', apprSubmit.status === 403);
+  const sub4 = await req(scr, 'POST', `/resolutions/${case4}/submit`, { body: {} });
+  ok('scrutiny submits; every check passes and it waits for approval', sub4.status < 300 && sub4.data.state === 'APPROVAL_PENDING' && sub4.data.checks.every((c) => c.pass), short(sub4.data.state + ' ' + JSON.stringify(sub4.data.blockedReasons)));
+  ok('the bank check is labelled as a simulation', sub4.data.checks.some((c) => /simulation/.test(c.label)) && sub4.data.bankSimulated === true);
+  const scrApprove = await req(scr, 'POST', `/resolutions/${case4}/approve`, { body: { comment: 'Looks fine to me' } });
+  ok('a scrutiny officer cannot approve (403)', scrApprove.status === 403);
+  const instApprove = await req(inst, 'POST', `/resolutions/${case4}/approve`, { body: { comment: 'Looks fine to me' } });
+  ok('the institution cannot approve (403)', instApprove.status === 403);
+  const both = await Promise.all([
+    req(app, 'POST', `/resolutions/${case4}/approve`, { body: { comment: 'Approved by checker, attempt one' } }),
+    req(app, 'POST', `/resolutions/${case4}/approve`, { body: { comment: 'Approved by checker, attempt two' } }),
+  ]);
+  const wins = both.filter((r) => r.status < 300).length;
+  ok('two simultaneous approvals: exactly one wins', wins === 1, both.map((r) => r.status).join(','));
+  const after4 = (await req(scr, 'GET', `/resolutions/${case4}`)).data;
+  ok('the case is ready for execution with exactly one approval on record', after4.state === 'EXECUTION_PENDING' && after4.approvals.length === 1, `${after4.state} ${after4.approvals.length}`);
+  const early4 = await req(scr, 'POST', `/resolutions/${case4}/complete`, { body: {} });
+  ok('a renewal cannot be completed before the renewed FDR is accepted (400)', early4.status === 400 && /renewed FDR/i.test(JSON.stringify(early4.data)), short(early4.data));
+  const attemptLog = (await req(adm, 'GET', '/audit?limit=100&q=RESOLUTION_DENIED')).data;
+  ok('refused attempts are written to the audit trail', attemptLog.items?.length >= 3, String(attemptLog.items?.length));
+
   // ------------------------------------------------------------------ H. renewal chain
   section('H. Renewal');
   const old = anchors.s4;
@@ -226,6 +265,28 @@ async function readyAndAccept(scr, id) {
   ok('the old FDR becomes Renewed', oldDone.fdr.status === 'RENEWED', oldDone.fdr.status);
   const chain = (await req(scr, 'GET', `/fdrs/${newId}`)).data;
   ok('the chain shows both FDRs', (chain.chain || []).length >= 2, short(chain.chain));
+  const done4 = await req(scr, 'POST', `/resolutions/${case4}/complete`, { body: {} });
+  ok('now the renewal case completes and links the renewed FDR', done4.status < 300 && done4.data.state === 'COMPLETED' && done4.data.linkedFdrId === newId, short(done4.data));
+  const again4 = await req(scr, 'POST', `/resolutions/${case4}/complete`, { body: {} });
+  ok('completing it again is refused (400)', again4.status === 400);
+  const mat4b = (await req(inst, 'GET', `/fdrs/${s4id}/maturity`)).data;
+  ok('a renewed FDR has no pending resolution and no case can be opened', mat4b.pendingResolution === false && mat4b.canOpenCase === false, short(mat4b));
+  const reopenFinal = await req(inst, 'POST', `/fdrs/${s4id}/resolutions`, { body: { type: 'RENEWAL', delayReason: 'Trying again after completion' } });
+  ok('opening a case on a renewed FDR is refused (400)', reopenFinal.status === 400);
+  const ev4 = (await req(scr, 'GET', `/resolutions/${case4}/events`)).data;
+  ok('the case history records every step in order', ev4.map((e) => e.event).join('|').includes('CASE_OPENED') && ev4.some((e) => e.event === 'APPROVED') && ev4.at(-1).event === 'COMPLETED', ev4.map((e) => e.event).join(','));
+
+  // ------------------------------------------------------------------ M2. resolution case for the release below
+  section('M2. Resolution case: release');
+  const s6a = anchors.s6a;
+  const c6 = await req(inst, 'POST', `/fdrs/${s6a}/resolutions`, { body: { type: 'RELEASE', delayReason: 'Obligation completed; security no longer needed (e2e)' } });
+  ok('the institution opens a release case', c6.status < 300 && c6.data.type === 'RELEASE', short(c6.data));
+  const case6 = c6.data.id;
+  await req(scr, 'POST', `/resolutions/${case6}/submit`, { body: {} });
+  const ap6 = await req(app, 'POST', `/resolutions/${case6}/approve`, { body: { comment: 'Obligations verified (e2e)' } });
+  ok('the release case is approved and waits for execution', ap6.status < 300 && ap6.data.state === 'EXECUTION_PENDING', short(ap6.data));
+  const early6 = await req(scr, 'POST', `/resolutions/${case6}/complete`, { body: { acknowledgment: 'Receipt confirmed by the institution' } });
+  ok('a release cannot be completed before the release order exists (400)', early6.status === 400, short(early6.data));
 
   // ------------------------------------------------------------------ I. release with maker-checker
   section('I. Release / refund with maker-checker');
@@ -256,6 +317,12 @@ async function readyAndAccept(scr, id) {
   ok('a different approving officer approves', approve.status < 300, short(approve.data));
   const rel = (await req(app, 'GET', `/fdrs/${relId}`)).data;
   ok('the FDR is Released', rel.fdr.status === 'RELEASED', rel.fdr.status);
+  const noAck = await req(scr, 'POST', `/resolutions/${case6}/complete`, { body: {} });
+  ok('a release needs a recorded acknowledgement (400)', noAck.status === 400 && /acknowledg/i.test(JSON.stringify(noAck.data)), short(noAck.data));
+  const done6 = await req(scr, 'POST', `/resolutions/${case6}/complete`, { body: { acknowledgment: 'Receipt confirmed by the institution registrar' } });
+  ok('with the order issued and an acknowledgement the release case completes', done6.status < 300 && done6.data.state === 'COMPLETED' && !!done6.data.orderNo && !!done6.data.acknowledgment, short(done6.data));
+  const risk0 = (await req(scr, 'GET', '/dashboard/maturity-risk')).data;
+  ok('a released FDR raises no overdue-resolution alert', !risk0.worst.some((w) => w.id === s6a), short(risk0.worst.map((w) => w.fdrNumber)));
 
   // ------------------------------------------------------------------ J. admin tools and scoping
   section('J. Admin tools: institutions, users, passwords, scoping');
@@ -560,12 +627,12 @@ async function readyAndAccept(scr, id) {
   const good = await pf(matching, { fdrNumber: `E2EPF${RUN}`.toUpperCase() });
   ok('pre-flight reads the scan and compares it with the typed values', good.status === 200 && good.data.fields?.length === 9, short(good.data));
   ok('a matching scan: the typed values agree with it field by field', good.data.fields.filter((f) => f.state === 'MATCH').length >= 8 && good.data.summary.differences <= 1, short(good.data.summary));
-  const bad = await pf(mismatching);
+  const bad = await pf(mismatching, { amount: '500000', ifsc: 'SBAB0002002' });
   const state = (r, k) => r.data.fields.find((f) => f.key === k)?.state;
   ok('a mismatching scan: the amount and the IFSC are shown as different', state(bad, 'amount') === 'DIFFERENT' && state(bad, 'ifsc') === 'DIFFERENT', short(bad.data.summary));
   ok('it shows both values so the institution can see the problem', bad.data.fields.find((f) => f.key === 'amount').extractedDisplay.includes('4,50,000') && bad.data.fields.find((f) => f.key === 'amount').typedDisplay.includes('5,00,000'));
   ok('and warns in plain words what would be flagged', bad.data.warnings.some((w) => w.type === 'AMOUNT_MISMATCH') && bad.data.warnings.some((w) => w.type === 'INVALID_IFSC'), short(bad.data.warnings.map((w) => w.type)));
-  const fixed = await pf(mismatching, { amount: '450000' });
+  const fixed = await pf(mismatching, { amount: '450000', ifsc: 'SBAB0002002' });
   ok('correcting the typed amount clears that difference', state(fixed, 'amount') === 'MATCH' && !fixed.data.warnings.some((w) => w.type === 'AMOUNT_MISMATCH'));
   const blank = await req(inst, 'POST', '/fdrs/preflight', { form: (() => { const f = new FormData(); f.append('document', new Blob([png], { type: 'image/png' }), 'x.png'); return f; })() });
   ok('with nothing typed it still reads the scan (values offered, none compared)', blank.status === 200 && blank.data.fields.filter((f) => f.state === 'NOT_TYPED').length >= 8, short(blank.data.summary));
@@ -607,6 +674,58 @@ async function readyAndAccept(scr, id) {
   ok('releases from the demo history have verifiable orders too', !!seededNo && (await req(null, 'GET', `/public/orders/${seededNo}`)).data.verdict === 'AUTHENTIC');
   const orderAudit = (await req(adm, 'GET', '/audit?limit=10&q=RELEASE_ORDER_ISSUED')).data;
   ok('each order is anchored by an entry in the audit trail', orderAudit.items?.length >= 2);
+
+  // ------------------------------------------------------------------ M3. blocking, policy, monitor, risk
+  section('M3. Resolution: blocking, policy, milestones, risk');
+  const esc2 = anchors.esc2;
+  const matE = (await req(scr, 'GET', `/fdrs/${esc2}/maturity`)).data;
+  ok('an FDR matured 35+ days ago shows its age and a critical band', matE.daysPastMaturity >= 35 && matE.band === 'MATURED_CRITICAL' && matE.pendingResolution === true, short(matE));
+  const race = await Promise.all([
+    req(scr, 'POST', `/fdrs/${esc2}/resolutions`, { body: { type: 'RENEWAL', delayReason: 'Simultaneous request A (e2e)' } }),
+    req(scr, 'POST', `/fdrs/${esc2}/resolutions`, { body: { type: 'RENEWAL', delayReason: 'Simultaneous request B (e2e)' } }),
+  ]);
+  ok('two simultaneous requests open exactly one case', race.filter((r) => r.status < 300).length === 1 && race.filter((r) => r.status === 409).length === 1, race.map((r) => r.status).join(','));
+  const caseE = race.find((r) => r.status < 300).data.id;
+  const otherInst = multi[0].tok;
+  ok('another institution cannot see the case (404)', (await req(otherInst, 'GET', `/resolutions/${caseE}`)).status === 404);
+  ok('another institution cannot open one on this FDR (404)', (await req(otherInst, 'POST', `/fdrs/${esc2}/resolutions`, { body: { type: 'RENEWAL', delayReason: 'Not my FDR at all' } })).status === 404);
+  const blockedE = await req(scr, 'POST', `/resolutions/${caseE}/submit`, { body: {} });
+  ok('without bank confirmation the case is blocked and says why', blockedE.status < 300 && blockedE.data.state === 'BLOCKED' && blockedE.data.blockedReasons.some((r) => /0\/9/.test(r)), short(blockedE.data.blockedReasons));
+  const blockedApprove = await req(app, 'POST', `/resolutions/${caseE}/approve`, { body: { comment: 'Trying to approve a blocked case' } });
+  ok('a blocked case cannot be approved (400)', blockedApprove.status === 400);
+  const pol = await req(adm, 'PATCH', '/resolution-policy', { body: { requireBank: false } });
+  ok('admin can relax the bank requirement', pol.status < 300 && pol.data.requireBank === false, short(pol.data));
+  ok('a scrutiny officer cannot change the policy (403)', (await req(scr, 'PATCH', '/resolution-policy', { body: { requireBank: true } })).status === 403);
+  await req(scr, 'POST', `/resolutions/${caseE}/reopen`, { body: {} });
+  const relaxed = await req(scr, 'POST', `/resolutions/${caseE}/submit`, { body: {} });
+  ok('with the requirement relaxed the case reaches approval, still showing the bank check as not done', relaxed.status < 300 && relaxed.data.state === 'APPROVAL_PENDING' && relaxed.data.checks.some((c) => c.key === 'BANK_CONFIRMED' && !c.pass), short(relaxed.data.state));
+  await req(adm, 'PATCH', '/resolution-policy', { body: { requireBank: true } });
+  const strict = await req(app, 'POST', `/resolutions/${caseE}/approve`, { body: { comment: 'Approving after policy tightened' } });
+  ok('if the policy is tightened again, approval re-checks the live record and is refused (400)', strict.status === 400 && /blocked/i.test(JSON.stringify(strict.data)), short(strict.data));
+  const rej = await req(app, 'POST', `/resolutions/${caseE}/reject`, { body: { comment: 'Rejected: bank confirmation still missing' } });
+  ok('the approver rejects it with a reason; the case is final', rej.status < 300 && rej.data.state === 'REJECTED' && rej.data.approvals.at(-1).decision === 'REJECTED', short(rej.data.state));
+  ok('a rejected case cannot be reopened (400)', (await req(scr, 'POST', `/resolutions/${caseE}/reopen`, { body: {} })).status === 400);
+  const fresh = await req(scr, 'POST', `/fdrs/${esc2}/resolutions`, { body: { type: 'RENEWAL', delayReason: 'New case after the rejection (e2e)', dueDate: '2020-01-01' } });
+  ok('after a rejection a new case can be opened', fresh.status < 300, short(fresh.data));
+  const esc = await req(scr, 'POST', `/resolutions/${fresh.data.id}/escalate`, { body: { reason: 'No response from the institution (e2e)' } });
+  ok('an officer escalates the case', esc.status < 300 && esc.data.escalationLevel === 1, short(esc.data));
+  ok('the institution cannot escalate (403)', (await req(otherInst, 'POST', `/resolutions/${fresh.data.id}/escalate`, { body: { reason: 'Not allowed to do this' } })).status === 403);
+  const run1 = await req(adm, 'POST', '/admin/radar/run', { body: {} });
+  const run2 = await req(adm, 'POST', '/admin/radar/run', { body: {} });
+  const n1 = run1.data?.summary?.maturityNotices ?? run1.data?.maturityNotices;
+  const n2 = run2.data?.summary?.maturityNotices ?? run2.data?.maturityNotices;
+  ok('the monitor announces milestones (and the missed case deadline)', typeof n1 === 'number' && n1 >= 0, short(run1.data));
+  ok('re-running the scheduler sends no duplicate notices', n2 === 0, `second run sent ${n2}`);
+  const apprNotes = (await req(app, 'GET', '/notifications')).data;
+  const pm = (apprNotes.items || apprNotes).filter((n) => n.kind === 'MATURITY' && n.fdrId === esc2);
+  ok('each milestone notice appears once per recipient', pm.length === new Set(pm.map((n) => n.title)).size, `${pm.length} notices`);
+  const risk = (await req(scr, 'GET', '/dashboard/maturity-risk')).data;
+  ok('the maturity-risk figures come from the records', risk.unresolved >= 1 && risk.critical >= 1 && risk.worst.some((w) => w.id === esc2) && typeof risk.casesByState === 'object', short(risk));
+  const dash = (await req(scr, 'GET', '/dashboard')).data;
+  ok('the dashboard carries the same figures', dash.maturityRisk?.unresolved === risk.unresolved);
+  const instRisk = (await req(otherInst, 'GET', '/dashboard/maturity-risk')).data;
+  ok('an institution only sees its own at-risk deposits', !instRisk.worst.some((w) => w.id === esc2) || false);
+  await req(scr, 'POST', `/resolutions/${fresh.data.id}/cancel`, { body: { reason: 'Test finished, cancelling (e2e)' } });
 
   // ------------------------------------------------------------------ L. audit chain
   section('L. Audit trail');

@@ -40,7 +40,7 @@ const BANKS = [
   { name: 'Sample Bank D', code: 'SBAD' },
 ];
 
-type DocVariant = 'none' | 'match' | 'amount' | 'badIfsc' | 'amountAndIfsc' | 'date' | 'notFavour' | 'dupDoc';
+type DocVariant = 'none' | 'match' | 'badIfsc' | 'badIfscNotFavour' | 'notFavour' | 'dupDoc';
 type BankSim = 'none' | 'match' | 'mismatch' | 'notfound' | 'outage';
 
 interface Spec {
@@ -56,7 +56,7 @@ interface Spec {
   doc?: DocVariant;
   sim?: BankSim;
   bankChecked?: boolean;
-  /** typed IFSC override (to create an invalid typed IFSC) */
+  /** IFSC printed on the document (to create a document with an invalid IFSC) */
   typedIfsc?: string;
   number?: string;
   note?: string;
@@ -70,7 +70,7 @@ const SPECS: Spec[] = [
   { key: 's2', inst: 0, bank: 0, amount: 1000000, status: 'ACCEPTED', mat: 214, doc: 'match', sim: 'match', bankChecked: true, note: 'Scenario 2: validity tracking (Active, with days to maturity)' },
   { key: 's3', inst: 0, bank: 1, amount: 750000, status: 'ACCEPTED', mat: 95, doc: 'match', sim: 'match', bankChecked: true, note: 'Scenario 3: approaching maturity (jump the demo clock)' },
   { key: 's4', inst: 0, bank: 2, amount: 600000, status: 'MATURED', mat: -3, doc: 'match', sim: 'match', bankChecked: true, note: 'Scenario 4: renewal (request, then upload the renewed FDR)' },
-  { key: 's5', inst: 1, bank: 0, amount: 500000, status: 'UNDER_SCRUTINY', mat: 330, doc: 'amountAndIfsc', sim: 'match', note: 'Scenario 5: amount mismatch + invalid IFSC awaiting the scrutiny officer' },
+  { key: 's5', inst: 1, bank: 0, amount: 500000, status: 'UNDER_SCRUTINY', mat: 330, doc: 'badIfscNotFavour', sim: 'match', note: 'Scenario 5: the document shows an invalid IFSC and a lien holder that is not AICTE, awaiting the scrutiny officer' },
   { key: 's6a', inst: 0, bank: 1, amount: 1200000, status: 'MATURED', mat: -12, doc: 'match', sim: 'match', bankChecked: true, note: 'Scenario 6: institution requests release' },
   { key: 's6b', inst: 1, bank: 2, amount: 900000, status: 'RELEASE_REQUESTED', mat: -20, doc: 'match', sim: 'match', bankChecked: true, note: 'Scenario 6: maker ticks checklist and recommends' },
   { key: 's6c', inst: 2, bank: 3, amount: 850000, status: 'RELEASE_RECOMMENDED', mat: -25, doc: 'match', sim: 'match', bankChecked: true, note: 'Scenario 6: checker approves' },
@@ -95,8 +95,8 @@ const SPECS: Spec[] = [
   { inst: 0, bank: 3, amount: 275000, status: 'DRAFT', mat: 365, doc: 'none' },
   { inst: 3, bank: 1, amount: 360000, status: 'SUBMITTED', mat: 320, doc: 'none', sim: 'match', note: 'No document: Missing document flag' },
   { inst: 1, bank: 1, amount: 505000, status: 'DISCREPANCY_RAISED', mat: 270, doc: 'notFavour', sim: 'match', note: 'Not in favour of the required authority' },
-  { inst: 2, bank: 2, amount: 390000, status: 'DISCREPANCY_RAISED', mat: 285, doc: 'badIfsc', sim: 'match', typedIfsc: 'SBAC1009009', note: 'Invalid typed IFSC' },
-  { inst: 2, bank: 0, amount: 200000, status: 'REJECTED', mat: 200, doc: 'amount', sim: 'notfound' },
+  { inst: 2, bank: 2, amount: 390000, status: 'DISCREPANCY_RAISED', mat: 285, doc: 'badIfsc', sim: 'match', typedIfsc: 'SBAC1009009', note: 'Invalid IFSC on the document' },
+  { inst: 2, bank: 0, amount: 200000, status: 'REJECTED', mat: 200, doc: 'match', sim: 'notfound' },
 
   // ---- the same FDR number used by two different institutions
   { key: 'dupNumA', inst: 4, bank: 3, amount: 480000, status: 'UNDER_SCRUTINY', mat: 250, doc: 'match', sim: 'match', number: 'FDDUP2026001', note: 'Duplicate FDR number (1 of 2)' },
@@ -120,7 +120,7 @@ async function main() {
   console.log('Resetting database...');
   await ensureAuditImmutability(prisma);
   await prisma.$executeRawUnsafe(
-    `TRUNCATE "ReleaseOrder","EmailLog","AuditLog","EscalationEvent","Reminder","Notification","ReleaseRequest","Discrepancy","Document","FdrField","FdrTransition","Fdr","SimBankRecord","ReminderRule","Setting","User","Institution" RESTART IDENTITY CASCADE`,
+    `TRUNCATE "MilestoneNotice","ResolutionCase","ReleaseOrder","EmailLog","AuditLog","EscalationEvent","Reminder","Notification","ReleaseRequest","Discrepancy","Document","FdrField","FdrTransition","Fdr","SimBankRecord","ReminderRule","Setting","User","Institution" RESTART IDENTITY CASCADE`,
   );
   await clock.setDemoDate(null);
   const today = await clock.today();
@@ -209,10 +209,14 @@ async function main() {
         maturityDate: DD_MM_YYYY(typed.maturityDate),
         inFavourOf: REQUIRED_AUTHORITY_NAME,
       };
-      if (variant === 'amount' || variant === 'amountAndIfsc') docSpec.amount = Math.round(spec.amount * 0.9);
-      if (variant === 'badIfsc' || variant === 'amountAndIfsc') docSpec.ifsc = ifsc.slice(0, 4) + '1' + ifsc.slice(5);
-      if (variant === 'date') docSpec.maturityDate = DD_MM_YYYY(isoDate(addDays(maturity, 30))!);
-      if (variant === 'notFavour') docSpec.inFavourOf = 'Sample Education Trust';
+      if (variant === 'badIfsc' || variant === 'badIfscNotFavour') docSpec.ifsc = ifsc.slice(0, 4) + '1' + ifsc.slice(5);
+      if (variant === 'notFavour' || variant === 'badIfscNotFavour') docSpec.inFavourOf = 'Sample Education Trust';
+      // The institution only uploads the document, so what it submits is what the document shows.
+      const fromDoc: Partial<Record<FieldKey, string>> = {};
+      if (docSpec.ifsc !== ifsc) fromDoc.ifsc = docSpec.ifsc;
+      if (docSpec.inFavourOf !== REQUIRED_AUTHORITY_NAME) fromDoc.inFavourOf = docSpec.inFavourOf;
+      for (const [k, val] of Object.entries(fromDoc)) await prisma.fdrField.update({ where: { fdrId_key: { fdrId: fdr.id, key: k } }, data: { submittedValue: val } });
+      if (Object.keys(fromDoc).length) await fdrsSvc.syncSummary(fdr.id);
       let buf: Buffer;
       if (variant === 'dupDoc') buf = sharedDupDoc.buf!;
       else {

@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ResolutionMonitorService } from '../resolution/resolution-monitor.service';
 import { PrismaService } from '../infra/prisma.service';
 import { ClockService } from '../infra/clock.service';
 import { LifecycleService } from '../infra/lifecycle.service';
@@ -30,6 +31,7 @@ export interface RadarSummary {
   statusChanges: number;
   remindersSent: number;
   escalations: number;
+  maturityNotices?: number;
 }
 
 /**
@@ -47,6 +49,7 @@ export class RadarService {
     private lifecycle: LifecycleService,
     private notify: NotifyService,
     private audit: AuditService,
+    private monitor: ResolutionMonitorService,
   ) {}
 
   async settings() {
@@ -91,6 +94,7 @@ export class RadarService {
       cursor = batch[batch.length - 1].id;
     }
     await this.escalate(ctx, summary);
+    summary.maturityNotices = await this.monitor.run();
     await this.audit.log({ actor, action: 'RADAR_RUN', entityType: 'System', detail: { ...summary } });
     this.log.log(`Radar ${summary.date}: ${summary.checked} FDRs, ${summary.statusChanges} status changes, ${summary.remindersSent} reminders, ${summary.escalations} escalations`);
     return summary;

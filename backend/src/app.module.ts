@@ -29,11 +29,14 @@ import { OrdersController } from './orders/orders.controller';
 import { CoverageController } from './coverage/coverage.controller';
 import { CoverageService } from './coverage/coverage.service';
 import { OrdersService } from './orders/orders.service';
+import { ResolutionController } from './resolution/resolution.controller';
+import { ResolutionService } from './resolution/resolution.service';
+import { ResolutionMonitorService } from './resolution/resolution-monitor.service';
 import { ReportsService } from './reports/reports.service';
 
 @Module({
   imports: [JwtModule.register({ global: true, secret: config.jwtSecret, signOptions: { expiresIn: config.jwtExpiresIn } })],
-  controllers: [AuthController, FdrsController, NotificationsController, DashboardController, AdminController, AuditController, DemoController, ReportsController, OrdersController, CoverageController],
+  controllers: [AuthController, FdrsController, NotificationsController, DashboardController, AdminController, AuditController, DemoController, ReportsController, OrdersController, CoverageController, ResolutionController],
   providers: [
     PrismaService,
     ClockService,
@@ -52,6 +55,8 @@ import { ReportsService } from './reports/reports.service';
     ReportsService,
     OrdersService,
     CoverageService,
+    ResolutionService,
+    ResolutionMonitorService,
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
   ],

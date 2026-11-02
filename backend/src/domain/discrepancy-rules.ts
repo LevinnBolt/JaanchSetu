@@ -29,7 +29,7 @@ export type DiscrepancyTypeName = (typeof DISCREPANCY_TYPES)[number];
 export type ValueMap = Partial<Record<FieldKey, string | null | undefined>>;
 
 export interface RuleInput {
-  /** Values typed by the institution. */
+  /** Values submitted by the institution: read from its document, or entered by hand where the document could not be read or the institution corrected it. */
   submitted: ValueMap;
   /** Values read by OCR (or the officer-corrected reading). null when no document has been read. */
   extracted: ValueMap | null;
@@ -82,7 +82,7 @@ export function evaluateDiscrepancies(input: RuleInput): RaisedDiscrepancy[] {
       add({
         type: 'AMOUNT_MISMATCH',
         fieldKey: 'amount',
-        reason: `The amount differs by ${formatInr(Math.abs(Number(amtS) - Number(amtE)))}: the institution typed ${formatInr(amtS)} but the document reads ${formatInr(amtE)}.`,
+        reason: `The amount differs by ${formatInr(Math.abs(Number(amtS) - Number(amtE)))}: the institution entered ${formatInr(amtS)} but the document reads ${formatInr(amtE)}.`,
       });
     }
     for (const key of ['issueDate', 'maturityDate'] as const) {
@@ -92,7 +92,7 @@ export function evaluateDiscrepancies(input: RuleInput): RaisedDiscrepancy[] {
         add({
           type: 'DATE_MISMATCH',
           fieldKey: key,
-          reason: `The ${FIELD_LABELS[key].toLowerCase()} differs: the institution typed ${formatDisplay(key, s)} but the document reads ${formatDisplay(key, e)}.`,
+          reason: `The ${FIELD_LABELS[key].toLowerCase()} differs: the institution entered ${formatDisplay(key, s)} but the document reads ${formatDisplay(key, e)}.`,
         });
       }
     }
@@ -102,7 +102,7 @@ export function evaluateDiscrepancies(input: RuleInput): RaisedDiscrepancy[] {
       add({
         type: 'FDR_NUMBER_MISMATCH',
         fieldKey: 'fdrNumber',
-        reason: `The FDR number differs: the institution typed ${normalizeValue('fdrNumber', nS)} but the document reads ${normalizeValue('fdrNumber', nE)}.`,
+        reason: `The FDR number differs: the institution entered ${normalizeValue('fdrNumber', nS)} but the document reads ${normalizeValue('fdrNumber', nE)}.`,
       });
     }
   }
@@ -157,7 +157,7 @@ export function evaluateDiscrepancies(input: RuleInput): RaisedDiscrepancy[] {
     add({
       type: 'NOT_IN_FAVOUR_OF_AUTHORITY',
       fieldKey: 'inFavourOf',
-      reason: `The institution typed "${favS}" as the lien holder, not ${REQUIRED_AUTHORITY_NAME}.`,
+      reason: `The institution entered "${favS}" as the lien holder, not ${REQUIRED_AUTHORITY_NAME}.`,
     });
   }
 

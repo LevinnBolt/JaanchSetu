@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { ResolutionService } from '../resolution/resolution.service';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../infra/prisma.service';
 import { ClockService } from '../infra/clock.service';
@@ -22,7 +23,7 @@ export interface QueueItem {
 
 @Injectable()
 export class DashboardService {
-  constructor(private prisma: PrismaService, private clock: ClockService, private coverage: CoverageService) {}
+  constructor(private prisma: PrismaService, private clock: ClockService, private coverage: CoverageService, private resolution: ResolutionService) {}
 
   async summary(user: AuthUser) {
     const today = await this.clock.today();
@@ -93,6 +94,7 @@ export class DashboardService {
       today: isoDate(today),
       coverage: coverageSummary,
       myCoverage,
+      maturityRisk: await this.resolution.risk(user),
       byStatus: Object.fromEntries(byStatusRows.map((r) => [r.status, r._count._all])),
       upcoming: upcomingRows.map((f) => this.item(f, today, '')),
       cards: { totalInstitutions, totalFdrs, active, pendingVerification, bankConfirmed, expiring90, matured, renewalPending: renewal, releasePending: release, openDiscrepancies, overdue },
@@ -269,10 +271,10 @@ export class DashboardService {
       groups: [
         { key: 'accuracy', title: 'Record accuracy', items: [
           { label: 'Discrepancies flagged automatically', value: auto, unit: '', note: `of ${flagged} flags in total, across ${withFlags} of ${submitted} submitted FDRs (${pct(withFlags, submitted) ?? 0}%)` },
-          { label: 'Submitted right the first time', value: pct(rightFirst, submitted), unit: '%', note: `${rightFirst} of ${submitted} submitted FDRs raised no automatic flag` },
-          { label: 'Pre-flight checks run before submitting', value: preflightRuns[0]?.runs ?? 0, unit: '', note: `${preflightRuns[0]?.diffs ?? 0} difference(s) between scan and typed values shown to institutions before they submitted` },
+          { label: 'Passed the automatic checks right the first time', value: pct(rightFirst, submitted), unit: '%', note: `${rightFirst} of ${submitted} submitted FDRs raised no automatic flag` },
+          { label: 'Pre-flight readings before submitting', value: preflightRuns[0]?.runs ?? 0, unit: '', note: `${preflightRuns[0]?.diffs ?? 0} difference(s) between the scan and values an institution had changed, shown before submitting` },
           { label: 'OCR readings confirmed by an officer', value: pct(reviewed, extracted), unit: '%', note: `${reviewed} of ${extracted} extracted values reviewed` },
-          { label: 'Values corrected by an officer', value: corrected, unit: '', note: 'Typing or OCR errors caught before acceptance' },
+          { label: 'Values corrected by an officer', value: corrected, unit: '', note: 'OCR or data-entry errors caught before acceptance' },
         ] },
         { key: 'turnaround', title: 'Verification turnaround', items: [
           { label: 'Average time to a scrutiny decision', value: r1(turn?.avg_days ?? null), unit: ' days', note: `median ${r1(turn?.median_days ?? null) ?? 'n/a'} days, over ${turn?.n ?? 0} decided FDRs` },

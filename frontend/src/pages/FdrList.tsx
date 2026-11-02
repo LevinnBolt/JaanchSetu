@@ -1,6 +1,5 @@
 import { t } from '../i18n';
 import { useState } from 'react';
-import SavedViews from '../components/SavedViews';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api, dmy, download, inr } from '../api';
 import { Days, Empty, Err, Icon, PageHeader, Pager, Skeleton, StatusBadge, VerifyBadge, statusText, titleCase, toast, useBank, useLoad } from '../ui';
@@ -41,7 +40,6 @@ export default function FdrList() {
           <button className="btn" onClick={() => download('/fdrs/export?' + filterQs, 'jaanchsetu-fdr-export.csv').then(() => toast(t('CSV exported with the current filters.'))).catch((e) => toast(e.message, 'err'))}><Icon name="download" size={16} />{t('Export CSV')}</button>
         </>} />
       <Err msg={error} />
-      <SavedViews query={filterQs} apply={(query)=>setSp(new URLSearchParams(query))}/>
 
       <div className="mb-4 flex flex-wrap gap-2" role="group" aria-label={t('Quick filters')}>
         {QUICK.map(([b, label, key]) => {

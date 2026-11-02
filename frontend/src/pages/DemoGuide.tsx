@@ -16,7 +16,7 @@ const ROLES: { role: string; need: string; login: string }[] = [
 const COVERAGE: { n: number; cap: string; how: string; to: string }[] = [
   { n: 1, cap: 'Central FDR repository', how: 'Institution-wise and instrument-wise records with filters, paging and CSV export. Admins add institutions and users one by one, or import thousands from a CSV.', to: '/fdrs' },
   { n: 2, cap: 'Digital document management', how: 'Upload, SHA-256 hash, AES-256 encrypted storage, side-by-side viewer on each FDR.', to: '/fdrs' },
-  { n: 3, cap: 'Verification and discrepancy detection', how: 'Three-state truth table, nine discrepancy types and a Verification column (Pending, Bank-confirmed or Discrepancy). Bank answers come from a labelled simulator, or from a real bank API when one is configured.', to: '/fdrs?bucket=pending' },
+  { n: 3, cap: 'Verification and discrepancy detection', how: 'Truth table (read from the document, bank, officer review), nine discrepancy types and a Verification column (Pending, Bank-confirmed or Discrepancy). Bank answers come from a labelled simulator, or from a real bank API when one is configured.', to: '/fdrs?bucket=pending' },
   { n: 4, cap: 'Validity and maturity tracking', how: 'Maturity Radar at 90, 60, 30 and 7 days, driven by a demo clock.', to: '/fdrs?bucket=expiring90' },
   { n: 5, cap: 'Renewal and replacement monitoring', how: 'Renewal requests link old and new FDR on one timeline.', to: '/fdrs?bucket=renewal' },
   { n: 6, cap: 'Release and refund workflow', how: 'Request release / refund, checklist, recommend, approve. The approver cannot be the maker, the requester or the creator.', to: '/fdrs?bucket=release' },
@@ -35,7 +35,7 @@ export default function DemoGuide() {
     { n: 2, t: 'Validity tracking', who: ['INSTITUTION', 'SCRUTINY', 'APPROVER', 'ADMIN'], body: 'The dashboard counts this FDR as Active, and its page shows days to maturity.', links: <><Link className="btn btn-sm" to="/">{t('Dashboard')}</Link><L k="s2">{t('Open the Active FDR')}</L></> },
     { n: 3, t: 'Approaching maturity', who: ['ADMIN', 'SCRUTINY'], body: 'This FDR matures in 95 days. In Admin click +30d (the 90-day reminder fires and status becomes Expiring soon), then +60d and +90d. Do not acknowledge: after 7 days the reminder escalates to the institution, then the scrutiny officer, then the approving officer.', links: <><L k="s3">{t('Open the FDR')}</L><Link className="btn-alt btn-sm" to="/admin">{t('Admin: demo clock')}</Link><L k="esc2">{t('See an escalated FDR')}</L></> },
     { n: 4, t: 'Renewal', who: ['INSTITUTION', 'SCRUTINY'], body: 'On this matured FDR choose Request renewal, then Upload renewed FDR (use a sample). A scrutiny officer accepts the new FDR and the old one becomes Renewed. Both appear on one timeline.', links: <><L k="s4">{t('Open the matured FDR')}</L><L k="renewedNew">{t('See a finished chain')}</L></> },
-    { n: 5, t: 'Discrepancy identification', who: ['SCRUTINY'], body: 'This FDR has an amount mismatch and an invalid IFSC. Resolve one with a note, waive the other with a written reason, confirm or correct the extracted values, then Accept.', links: <L k="s5">{t('Open the flagged FDR')}</L> },
+    { n: 5, t: 'Discrepancy identification', who: ['SCRUTINY'], body: 'The document of this FDR shows an invalid IFSC and a lien holder that is not AICTE. Resolve one with a note, waive the other with a written reason, confirm or correct the values read from the document, then Accept.', links: <L k="s5">{t('Open the flagged FDR')}</L> },
     { n: 6, t: 'Authorised release', who: ['INSTITUTION', 'SCRUTINY', 'APPROVER'], body: 'The institution requests release / refund on the first FDR. As scrutiny, tick the checklist (each with a note) and recommend on the second. As approver, approve the third. Then read the audit trail.', links: <><L k="s6a">{t('1 Request release')}</L><L k="s6b">{t('2 Recommend')}</L><L k="s6c">{t('3 Approve')}</L><Link className="btn-alt btn-sm" to="/audit">{t('Audit trail')}</Link></> },
   ];
   return (
@@ -87,7 +87,7 @@ export default function DemoGuide() {
         <p className="mt-2 text-xs text-stone-500">{t('Honest limit: bank verification is simulated unless a bank API is configured, and no real bank agreement exists for this prototype. A real deployment would use an authorised bank API or the RBI Account Aggregator framework. That route is not built.')}</p>
       </section>
 
-      <p className="text-sm text-stone-600">{t('Sample receipt images:')} <a className="font-semibold underline" href="/api/demo/samples/sample-fdr-matching.png">{t('matching')}</a> · <a className="font-semibold underline" href="/api/demo/samples/sample-fdr-mismatch.png">{t('mismatching')}</a></p>
+      <p className="text-sm text-stone-600">{t('Sample receipt images:')} <a className="font-semibold underline" href="/api/demo/samples/sample-fdr-matching.png">{t('matching')}</a> · <a className="font-semibold underline" href="/api/demo/samples/sample-fdr-mismatch.png">{t('problem document')}</a></p>
     </div>
   );
 }

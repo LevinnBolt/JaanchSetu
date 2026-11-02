@@ -122,6 +122,7 @@ model Fdr {
   reminders      Reminder[]
   releaseRequests ReleaseRequest[]
   transitions    FdrTransition[]
+  resolutionCases ResolutionCase[]
 
   @@index([institutionId])
   @@index([status])
@@ -355,4 +356,112 @@ model ReleaseOrder {
   createdAt        DateTime @default(now())
 
   @@index([fdrId])
+}
+
+// ---- Resolution layer: what is being done about a matured (or maturing) FDR.
+// The FDR keeps its financial status; a case records the administrative workflow around it.
+enum ResolutionType {
+  RENEWAL
+  RELEASE
+}
+
+enum ResolutionState {
+  OPEN
+  EVIDENCE_PENDING
+  VERIFICATION_PENDING
+  APPROVAL_PENDING
+  APPROVED
+  EXECUTION_PENDING
+  COMPLETED
+  REJECTED
+  BLOCKED
+  CANCELLED
+}
+
+model ResolutionCase {
+  id               String          @id @default(cuid())
+  caseNo           String          @unique
+  fdrId            String
+  fdr              Fdr             @relation(fields: [fdrId], references: [id], onDelete: Cascade)
+  type             ResolutionType
+  state            ResolutionState @default(OPEN)
+  delayReason      String
+  assignedToId     String?
+  assignedToName   String?
+  dueDate          DateTime?
+  escalationLevel  Int             @default(0)
+  version          Int             @default(1)
+  openedById       String
+  openedByName     String
+  submittedById    String?
+  submittedByName  String?
+  blockedReasons   Json?
+  linkedFdrId      String?
+  releaseRequestId String?
+  acknowledgment   String?
+  completedAt      DateTime?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  evidence  ResolutionEvidence[]
+  approvals ResolutionApproval[]
+  events    ResolutionEvent[]
+
+  @@index([fdrId])
+  @@index([state])
+}
+
+model ResolutionEvidence {
+  id          String         @id @default(cuid())
+  caseId      String
+  case        ResolutionCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  kind        String
+  note        String
+  documentId  String?
+  addedById   String
+  addedByName String
+  createdAt   DateTime       @default(now())
+
+  @@index([caseId])
+}
+
+model ResolutionApproval {
+  id           String         @id @default(cuid())
+  caseId       String
+  case         ResolutionCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  decision     String
+  reviewerId   String
+  reviewerName String
+  role         String
+  comment      String
+  at           DateTime       @default(now())
+
+  @@index([caseId])
+}
+
+// Append-only: nothing in the application updates or deletes these rows.
+model ResolutionEvent {
+  id         String         @id @default(cuid())
+  caseId     String
+  case       ResolutionCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  actorId    String?
+  actorLabel String
+  event      String
+  fromState  ResolutionState?
+  toState    ResolutionState?
+  meta       Json?
+  idemKey    String?        @unique
+  at         DateTime       @default(now())
+
+  @@index([caseId])
+}
+
+// One notice per FDR per post-maturity milestone, however often the monitor runs.
+model MilestoneNotice {
+  id        String   @id @default(cuid())
+  fdrId     String
+  milestone String
+  createdAt DateTime @default(now())
+
+  @@unique([fdrId, milestone])
 }

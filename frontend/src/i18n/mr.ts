@@ -68,5 +68,17 @@ const d: Record<string, string> = {
   'Institution user': 'संस्था वापरकर्ता',
   'Scrutiny Officer (maker)': 'छाननी अधिकारी (मेकर)',
   'Approving Officer (checker)': 'मंजुरी अधिकारी (चेकर)',
+  'Resolution': 'निराकरण',
+  'Renewal case': 'नूतनीकरण प्रकरण',
+  'Release case': 'प्रकाशन प्रकरण',
+  'Maturity risk': 'परिपक्वता धोका',
+  'Open case': 'प्रकरण उघडा',
+  'Approve': 'मंजूर करा',
+  'Completed': 'पूर्ण',
+  'Blocked': 'अवरोधित',
+  'Cancelled': 'रद्द',
+  'Principal': 'मुद्दल',
+  'Reason': 'कारण',
+  'Due date': 'नियत तारीख',
 };
 export default d;

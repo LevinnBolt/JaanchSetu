@@ -37,7 +37,6 @@ export async function download(path: string, filename: string, open = false) {
   const url = URL.createObjectURL(await res.blob());
   if (open) window.open(url, '_blank');
   else { const a = document.createElement('a'); a.href = url; a.download = filename; a.click(); }
-  setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 
 export const inr = (n: number | null | undefined) => (n === null || n === undefined ? '—' : '₹' + n.toLocaleString('en-IN'));

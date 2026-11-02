@@ -1,3 +1,4 @@
+
 import { Controller, Get, NotFoundException, Param, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import { PrismaService } from '../infra/prisma.service';
@@ -18,7 +19,7 @@ const AUTHORITY = 'All India Council for Technical Education';
 export const SAMPLES: Record<string, { file: string; typed: Record<string, string>; doc: SampleDoc; note: string }> = {
   matching: {
     file: 'sample-fdr-matching.png',
-    note: 'Document agrees with the typed values: no discrepancies expected.',
+    note: 'The values read from this document are consistent: no discrepancies expected.',
     typed: {
       fdrNumber: 'FDRSMP260001',
       bank: 'Sample Bank A',
@@ -42,15 +43,15 @@ export const SAMPLES: Record<string, { file: string; typed: Record<string, strin
       inFavourOf: AUTHORITY,
     },
   },
-  mismatch: {
+  problem: {
     file: 'sample-fdr-mismatch.png',
-    note: 'Document shows ₹4,50,000 and a malformed IFSC while the typed values say ₹5,00,000: expect an amount mismatch and an invalid IFSC flag.',
+    note: 'A problem document: it shows ₹4,50,000 and a malformed IFSC. The values read from it are submitted as they are; expect an invalid IFSC flag.',
     typed: {
       fdrNumber: 'FDRSMP260002',
       bank: 'Sample Bank B',
       branch: 'Coimbatore Central',
-      ifsc: 'SBAB0002002',
-      amount: '500000',
+      ifsc: 'SBAB1002002',
+      amount: '450000',
       issueDate: '2026-05-10',
       maturityDate: '2027-05-10',
       depositorName: 'Sample Institute of Technology, Salem',
